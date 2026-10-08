@@ -1,0 +1,15 @@
+{
+  "short_name": "Recap Room",
+  "name": "Recap Room by Carnelian",
+  "icons": [
+    {
+      "src": "logo.png",
+      "type": "image/png",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#282547",
+  "background_color": "#282547"
+}
