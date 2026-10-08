@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -578,14 +578,39 @@ function SubmitBoard({ state, url }) {
 
 function VoteBoard({ state, url }) {
   const count = state.statements.length;
-  const vcols = count <= 8 ? 1 : count <= 24 ? 2 : 3;
+  const listRef = useRef(null);
+  const fitKey = state.statements.map((s) => s.id + s.text).join('|');
+
+  // Auto-fit: largest font size at which every takeaway fits on screen
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (!el) return undefined;
+    const fit = () => {
+      let lo = 10;
+      let hi = Math.max(lo + 1, Math.round(window.innerHeight / 22));
+      el.style.fontSize = `${hi}px`;
+      if (el.scrollHeight <= el.clientHeight + 1) return;
+      while (hi - lo > 1) {
+        const mid = Math.floor((lo + hi) / 2);
+        el.style.fontSize = `${mid}px`;
+        if (el.scrollHeight <= el.clientHeight + 1) lo = mid;
+        else hi = mid;
+      }
+      el.style.fontSize = `${lo}px`;
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el.parentElement);
+    return () => ro.disconnect();
+  }, [fitKey]);
+
   return (
     <>
       <section className="vb">
         <h2>
           Pick your top {Math.min(state.votesPerPerson, count)} on your phone
         </h2>
-        <div className="vb-list" style={{ '--vcols': vcols }}>
+        <div className="vb-list" ref={listRef}>
           {state.statements.map((s) => (
             <div key={s.id} className="vb-item">
               <span className="n">{s.number}</span>
@@ -1518,31 +1543,44 @@ a { color: inherit; text-decoration: none; }
 
 .vb { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .vb h2 { margin: 0 0 1.8vh; font-size: 1.7em; letter-spacing: -0.01em; }
-.vb-list { flex: 1; min-height: 0; column-count: var(--vcols); column-gap: 1.4vw; }
-.vb-item {
-  break-inside: avoid;
+.vb-list {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  justify-content: center;
+  gap: 0.5em 0.5em;
+  font-size: 24px;
+}
+.vb-item {
+  display: inline-flex;
   align-items: flex-start;
-  gap: 0.8vw;
-  margin-bottom: 0.9vh;
-  padding: 0.9vh 0.8vw;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.06);
+  gap: 0.5em;
+  max-width: min(100%, 20em);
+  padding: 0.45em 0.75em 0.5em 0.5em;
+  border-radius: 0.55em;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  animation: pop 0.45s ease;
 }
 .vb-item .n {
   flex: none;
-  min-width: 2em;
-  height: 2em;
-  border-radius: 8px;
+  min-width: 1.7em;
+  height: 1.7em;
+  padding: 0 0.3em;
+  border-radius: 0.4em;
   display: grid;
   place-items: center;
   background: var(--orange);
   color: var(--navy);
   font-weight: 800;
-  font-size: 0.9em;
+  font-size: 0.78em;
+  margin-top: 0.08em;
 }
-.vb-item p { margin: 0; font-size: 0.93em; line-height: 1.32; }
-.vb-item small { display: block; margin-top: 0.3vh; font-size: 0.78em; font-weight: 600; color: rgba(255, 255, 255, 0.5); }
+.vb-item p { margin: 0; font-size: 1em; font-weight: 600; line-height: 1.25; }
+.vb-item small { display: block; margin-top: 0.2em; font-size: 0.58em; font-weight: 600; color: rgba(255, 255, 255, 0.5); }
 
 .results { flex: 1; width: 100%; max-width: 74vw; margin: 0 auto; display: flex; flex-direction: column; justify-content: center; }
 .results h2 { display: flex; align-items: center; gap: 0.5em; margin: 0 0 3vh; font-size: 2.4em; letter-spacing: -0.02em; }
