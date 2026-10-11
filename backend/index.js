@@ -151,6 +151,13 @@ io.on('connection', (socket) => {
   const reply = (cb, res) => typeof cb === 'function' && cb(res);
   const fail = (cb, error) => reply(cb, { ok: false, error });
 
+  // Phones send their device id with every (re)connection, so taps queued while offline are never rejected
+  const authId = socket.handshake.auth && socket.handshake.auth.deviceId;
+  if (typeof authId === 'string' && authId.length > 0 && authId.length < 100) {
+    socket.data.deviceId = authId;
+    socket.emit('me', meFor(authId));
+  }
+
   socket.emit('state', publicState());
   socket.on('state:get', () => socket.emit('state', publicState()));
 
