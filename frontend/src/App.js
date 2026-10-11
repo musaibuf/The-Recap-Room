@@ -24,7 +24,17 @@ export default function App() {
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000';
 
-const socket = io(BACKEND_URL, { transports: ['websocket', 'polling'] });
+const socket = io(BACKEND_URL, {
+  transports: ['websocket', 'polling'],
+  // Sent with every (re)connection so the server knows this phone before any queued tap arrives
+  auth: (cb) => {
+    try {
+      cb({ deviceId: getDeviceId() });
+    } catch {
+      cb({});
+    }
+  },
+});
 
 function emit(event, payload) {
   return new Promise((resolve) => {
