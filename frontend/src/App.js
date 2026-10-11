@@ -771,8 +771,11 @@ function Facilitator() {
           >
             <Copy size={15} /> Copy join link
           </button>
-          <button className="btn btn-sm btn-outline" onClick={() => exportCsv(fs)}>
-            <Download size={15} /> Export CSV
+          <button
+            className="btn btn-sm btn-outline"
+            onClick={() => exportExcel(fs).catch(() => setToast('Export failed. Please try again.'))}
+          >
+            <Download size={15} /> Export Excel
           </button>
           <button
             className="btn btn-sm btn-danger-outline"
@@ -1026,7 +1029,7 @@ function ModItem({ s, fs, active, run }) {
           {s.alsoFrom.length > 0 && <span>Also from {s.alsoFrom.map((id) => teamName(fs.teams, id)).join(', ')}</span>}
           {s.hidden && <span className="tag muted">Hidden</span>}
           {target && <span className="tag muted">Merged into #{target.number || '-'}</span>}
-          {!s.hidden && !s.mergedInto && fs.phase !== 'setup' && fs.phase !== 'submit' && <span>{s.votes} votes</span>}
+          {!s.hidden && !s.mergedInto && fs.phase !== 'setup' && fs.phase !== 'submit' && <span>{s.votes} vote{s.votes === 1 ? '' : 's'}</span>}
         </div>
         {merging && (
           <select
@@ -1109,7 +1112,7 @@ function ResultsPanel({ fs }) {
             <div key={r.id} className={`rm-row ${i < fs.revealCount ? 'in-top' : ''}`}>
               <span className="badge-n">{r.number}</span>
               <div className="rm-body">
-                <div className="rm-txt">{r.text}</div>
+                <div className="rm-txt" title={r.text}>{r.text}</div>
                 <div className="rm-bar">
                   <i style={{ width: `${(r.votes / max) * 100}%` }} />
                 </div>
@@ -1123,33 +1126,171 @@ function ResultsPanel({ fs }) {
   );
 }
 
-function exportCsv(fs) {
-  const esc = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+/* ---------------- Excel export ---------------- */
+
+const PHASE_NAMES = { setup: 'Setup', submit: 'Takeaways', review: 'Review', vote: 'Voting', reveal: 'Reveal' };
+
+async function exportExcel(fs) {
+  const XLSX = await import('xlsx');
+  const wb = XLSX.utils.book_new();
+  const tn = (id) => teamName(fs.teams, id);
+  const voters = fs.votersCount;
+  const totalVotes = fs.results.reduce((a, r) => a + r.votes, 0);
   const rank = {};
   fs.results.forEach((r, i) => {
     rank[r.id] = i + 1;
   });
-  const rows = [['Rank', 'Ballot #', 'Team', 'Also from', 'Takeaway', 'Votes', 'Status']];
-  const sorted = fs.all.slice().sort((a, b) => (rank[a.id] || 999) - (rank[b.id] || 999));
-  sorted.forEach((s) => {
-    const status = s.hidden ? 'Hidden' : s.mergedInto ? 'Merged' : 'On ballot';
-    rows.push([
-      rank[s.id] || '',
-      s.number || '',
-      teamName(fs.teams, s.teamId),
-      s.alsoFrom.map((id) => teamName(fs.teams, id)).join('; '),
-      s.text,
-      s.hidden || s.mergedInto ? '' : s.votes,
-      status,
-    ]);
+  const byId = Object.fromEntries(fs.all.map((s) => [s.id, s]));
+  const status = (s) => (s.hidden ? 'Hidden' : s.mergedInto ? 'Merged' : 'On ballot');
+  const pct = (n, d) => (d ? n / d : 0);
+
+  const addSheet = (name, rows, widths, { filter = false, pctCols = [] } = {}) => {
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = widths.map((wch) => ({ wch }));
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+    if (filter && rows.length > 1) ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length - 1, c: range.e.c } }) };
+    pctCols.forEach((c) => {
+      for (let r = 1; r <= range.e.r; r += 1) {
+        const cell = ws[XLSX.utils.encode_cell({ r, c })];
+        if (cell && typeof cell.v === 'number') cell.z = '0%';
+      }
+    });
+    XLSX.utils.book_append_sheet(wb, ws, name);
+  };
+
+  /* 1. Summary */
+  const submittedTeams = fs.teams.filter((t) => t.submitted).length;
+  const top = fs.results.slice(0, fs.revealCount);
+  const summary = [
+    ['Recap Room results', ''],
+    ['', ''],
+    ['Session', fs.title],
+    ['Exported', new Date().toLocaleString()],
+    ['Stage at export', PHASE_NAMES[fs.phase] || fs.phase],
+    ['', ''],
+    ['Teams', fs.teams.length],
+    ['Teams that submitted', submittedTeams],
+    ['Takeaways submitted', fs.all.length],
+    ['Takeaways on the ballot', fs.results.length],
+    ['Merged as duplicates', fs.all.filter((s) => s.mergedInto).length],
+    ['Hidden by facilitator', fs.all.filter((s) => s.hidden).length],
+    ['', ''],
+    ['People expected', fs.expected],
+    ['People who voted', voters],
+    ['Turnout', pct(voters, fs.expected)],
+    ['Total votes cast', totalVotes],
+    ['', ''],
+    [`Top ${fs.revealCount} takeaways`, ''],
+    ['Rank', 'Takeaway', 'Team', 'Votes', '% of voters'],
+    ...top.map((r, i) => [i + 1, r.text, [r.teamId, ...r.alsoFrom].map(tn).join(' & '), r.votes, pct(r.votes, voters)]),
+    ['', ''],
+    ['Key', ''],
+    ['Takeaways submitted', 'Every takeaway captains entered, including ones later hidden or merged.'],
+    ['On the ballot', 'Takeaways people could vote for after the facilitator review.'],
+    ['Turnout', 'People who voted divided by people expected.'],
+    ['% of voters', 'Share of voters who picked this takeaway as one of their 3.'],
+    ['Sheets', 'Ranking: every ballot item by votes. By Team: what each team submitted. Team Summary: one row per team.'],
+  ];
+  const summaryWs = XLSX.utils.aoa_to_sheet(summary);
+  summaryWs['!cols'] = [{ wch: 26 }, { wch: 70 }, { wch: 22 }, { wch: 8 }, { wch: 12 }];
+  summaryWs.B16.z = '0%';
+  top.forEach((_, i) => {
+    const cell = summaryWs[XLSX.utils.encode_cell({ r: 20 + i, c: 4 })];
+    if (cell) cell.z = '0%';
   });
-  const csv = '﻿' + rows.map((r) => r.map(esc).join(',')).join('\r\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `${fs.title.replace(/[^\w]+/g, '-').toLowerCase() || 'recap-room'}-results.csv`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
+
+  /* 2. Ranking: every ballot item, most votes first */
+  addSheet(
+    'Ranking',
+    [
+      ['Rank', 'Ballot #', 'Takeaway', 'Submitted by', 'Also submitted by (merged)', 'Votes', '% of voters', 'Share of all votes'],
+      ...fs.results.map((r, i) => [
+        i + 1,
+        r.number,
+        r.text,
+        tn(r.teamId),
+        r.alsoFrom.map(tn).join(', '),
+        r.votes,
+        pct(r.votes, voters),
+        pct(r.votes, totalVotes),
+      ]),
+    ],
+    [7, 9, 60, 14, 24, 8, 12, 16],
+    { filter: true, pctCols: [6, 7] }
+  );
+
+  /* 3. By Team: every takeaway in submission order */
+  const byTeam = fs.all
+    .slice()
+    .sort((a, b) => a.teamId - b.teamId || a.order - b.order)
+    .map((s) => {
+      const target = s.mergedInto ? byId[s.mergedInto] : null;
+      return [
+        tn(s.teamId),
+        s.order + 1,
+        s.text,
+        status(s),
+        s.number || '',
+        target ? `#${target.number || '-'} ${target.text}` : '',
+        status(s) === 'On ballot' ? s.votes : '',
+        rank[s.id] || '',
+      ];
+    });
+  addSheet(
+    'By Team',
+    [['Team', 'Takeaway #', 'Takeaway', 'Status', 'Ballot #', 'Votes counted under', 'Votes', 'Rank'], ...byTeam],
+    [12, 11, 60, 11, 9, 50, 8, 7],
+    { filter: true }
+  );
+
+  /* 4. Team Summary: one row per team */
+  const teamRows = fs.teams.map((t) => {
+    const mine = fs.all.filter((s) => s.teamId === t.id);
+    const onBallot = mine.filter((s) => status(s) === 'On ballot');
+    const best = onBallot.slice().sort((a, b) => (rank[a.id] || 999) - (rank[b.id] || 999))[0];
+    return [
+      t.name,
+      t.submitted ? 'Submitted' : 'Not submitted',
+      mine.length,
+      onBallot.length,
+      mine.filter((s) => s.mergedInto).length,
+      mine.filter((s) => s.hidden).length,
+      onBallot.reduce((a, s) => a + s.votes, 0),
+      best ? best.text : '',
+      best ? best.votes : '',
+      best ? rank[best.id] : '',
+    ];
+  });
+  addSheet(
+    'Team Summary',
+    [['Team', 'Status', 'Submitted', 'On ballot', 'Merged', 'Hidden', 'Total votes', 'Best takeaway', 'Its votes', 'Its rank'], ...teamRows],
+    [12, 14, 10, 10, 8, 8, 11, 55, 9, 8],
+    { filter: true }
+  );
+
+  /* 5. Key: what every column means */
+  addSheet(
+    'Key',
+    [
+      ['Sheet', 'Column', 'Meaning'],
+      ['Ranking', 'Rank', 'Position by votes, same order as the projector reveal. Ties keep ballot order.'],
+      ['Ranking', 'Ballot #', 'The number shown next to the takeaway on phones and the projector.'],
+      ['Ranking', 'Also submitted by (merged)', 'Other teams whose matching takeaway was merged into this one.'],
+      ['Ranking', '% of voters', 'Votes divided by people who voted. Each person picked 3, so these add up to about 300%.'],
+      ['Ranking', 'Share of all votes', 'Votes divided by all votes cast. These add up to 100%.'],
+      ['By Team', 'Takeaway #', 'Order the captain entered it in (1 to 3).'],
+      ['By Team', 'Status', 'On ballot: voted on. Merged: combined into a matching takeaway. Hidden: removed by the facilitator.'],
+      ['By Team', 'Votes counted under', 'For merged takeaways, the ballot item that received their votes.'],
+      ['By Team', 'Votes / Rank', 'Shown only for takeaways that were on the ballot.'],
+      ['Team Summary', 'Total votes', 'Sum of votes for the team\'s takeaways on the ballot.'],
+      ['Team Summary', 'Best takeaway', 'The team\'s highest ranked takeaway.'],
+    ],
+    [14, 26, 95]
+  );
+
+  const name = `${fs.title.replace(/[^\w]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'recap-room'}-results.xlsx`;
+  XLSX.writeFile(wb, name);
 }
 
 /* ================= STYLES ================= */
@@ -1657,6 +1798,7 @@ a { color: inherit; text-decoration: none; }
 .step.is-current .i { background: var(--red); color: #fff; }
 
 .fac-grid { display: grid; grid-template-columns: 330px minmax(0, 1fr) 360px; gap: 16px; align-items: start; padding: 0 24px 40px; }
+.fac-grid > *, .fac-grid .col > * { min-width: 0; }
 .fac-grid .col { display: grid; gap: 16px; }
 @media (max-width: 1200px) { .fac-grid { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 760px) { .fac-grid { grid-template-columns: 1fr; } .fac-top { flex-wrap: wrap; } }
@@ -1696,8 +1838,8 @@ a { color: inherit; text-decoration: none; }
 .tag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 99px; background: #efeef6; color: var(--navy); font-size: 11px; font-weight: 700; }
 .tag.muted { background: #fff4e8; color: #9a4b00; }
 
-.res-mini { display: grid; gap: 10px; }
-.rm-row { display: flex; align-items: center; gap: 10px; }
+.res-mini { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.rm-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .rm-row .badge-n { background: #c9c7d6; }
 .rm-row.in-top .badge-n { background: var(--red); }
 .rm-body { flex: 1; min-width: 0; }
