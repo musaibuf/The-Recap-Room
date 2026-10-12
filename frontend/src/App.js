@@ -4,7 +4,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import {
   Check, ChevronLeft, ChevronRight, CircleCheck, Clock, Copy, Download, Eye, EyeOff, GitMerge, Hourglass,
   KeyRound, ListChecks, LoaderCircle, Lock, LockOpen, MonitorPlay, Pencil, RotateCcw, Send, Settings2,
-  Trophy, Undo2, Users, WifiOff, X,
+  Trophy, Undo2, Users, WifiOff, X, CloudCheck, CloudAlert, CloudOff, RefreshCw, ExternalLink,
 } from 'lucide-react';
 
 /* Recap Room: participant (/), projector (?view=dashboard), facilitator (?view=facilitator) */
@@ -153,16 +153,16 @@ function Participant() {
 
   let body;
   if (!state) {
-    body = <StateCard icon={LoaderCircle} spin title="Connecting" text="One moment." />;
+    body = <StateCard icon={LoaderCircle} spin title="Connecting..." text="Please wait." />;
   } else if (state.phase === 'setup') {
-    body = <StateCard icon={Clock} title="We'll begin shortly" text="Keep this page open. It updates on its own." />;
+    body = <StateCard icon={Clock} title="Please wait" text="We will start soon. Keep this page open." />;
   } else if (state.phase === 'submit') {
     body = me.captainTeamId ? <CaptainDone state={state} teamId={me.captainTeamId} /> : <CaptainFlow state={state} />;
   } else if (state.phase === 'review') {
     body = me.captainTeamId ? (
       <CaptainDone state={state} teamId={me.captainTeamId} />
     ) : (
-      <StateCard icon={Hourglass} title="Voting opens in a moment" text="All team takeaways are in. Keep this page open." />
+      <StateCard icon={Hourglass} title="Voting starts soon" text="Please keep this page open." />
     );
   } else if (state.phase === 'vote') {
     body = me.votedIds ? <VoteDone state={state} ids={me.votedIds} /> : <VoteFlow state={state} />;
@@ -178,7 +178,7 @@ function Participant() {
       </header>
       {!connected && state && (
         <div className="p-offline">
-          <WifiOff size={15} /> Reconnecting...
+          <WifiOff size={15} /> No internet. Trying again...
         </div>
       )}
       <main className="p-body">{body}</main>
@@ -214,8 +214,8 @@ function CaptainFlow({ state }) {
       <>
         <div className="p-intro">
           <div className="eyebrow">Team captains</div>
-          <h1>Pick your team</h1>
-          <p>Add the takeaways your team agreed on. Not a captain? Stay on this page, voting opens next.</p>
+          <h1>Choose your team</h1>
+          <p>Only team captains fill this. Not a captain? Please wait here. Voting comes next.</p>
         </div>
         <div className="team-grid">
           {state.teams.map((t) => (
@@ -223,7 +223,7 @@ function CaptainFlow({ state }) {
               {t.name}
               {t.submitted && (
                 <small>
-                  <Lock size={11} /> Submitted
+                  <Lock size={11} /> Done
                 </small>
               )}
             </button>
@@ -267,13 +267,13 @@ function TakeawayForm({ state, team, onBack }) {
       </button>
       <div className="p-intro">
         <div className="eyebrow">{team.name}</div>
-        <h1>Your team's takeaways</h1>
-        <p>Write each one as a behaviour your team commits to after today.</p>
+        <h1>What will your team do?</h1>
+        <p>Write 1 to 3 short points. What will your team do after today?</p>
       </div>
       {values.map((v, i) => (
         <div className="field" key={i}>
           <label htmlFor={`t${i}`}>
-            Takeaway {i + 1}
+            Point {i + 1}
             <span>
               {v.length}/{state.maxLen}
             </span>
@@ -283,7 +283,7 @@ function TakeawayForm({ state, team, onBack }) {
             rows={3}
             maxLength={state.maxLen}
             value={v}
-            placeholder={i === 0 ? 'e.g. We will give credit openly in team meetings' : ''}
+            placeholder={i === 0 ? 'Example: We will thank people more' : ''}
             onChange={(e) => update(i, e.target.value)}
           />
         </div>
@@ -291,9 +291,9 @@ function TakeawayForm({ state, team, onBack }) {
       {error && <div className="error">{error}</div>}
       <button className="btn btn-primary btn-block" disabled={!filled || sending} onClick={submit}>
         {sending ? <LoaderCircle size={18} className="spin" /> : <Send size={18} />}
-        Submit {filled} takeaway{filled === 1 ? '' : 's'}
+        Send {filled} point{filled === 1 ? '' : 's'}
       </button>
-      <p className="note">Once submitted, your team's entry is locked.</p>
+      <p className="note">You cannot change it after you send.</p>
     </>
   );
 }
@@ -305,8 +305,8 @@ function CaptainDone({ state, teamId }) {
     <StateCard
       icon={CircleCheck}
       ok
-      title={`${team ? team.name : 'Your team'} is in`}
-      text="Your takeaways are on the main screen. Voting opens next, keep this page open."
+      title={`${team ? team.name : 'Your team'}: sent!`}
+      text="Your points are on the big screen. Please wait for voting."
     >
       {mine.length > 0 && (
         <ul className="recap-list">
@@ -351,8 +351,8 @@ function VoteFlow({ state }) {
     <>
       <div className="p-intro">
         <div className="eyebrow">Vote</div>
-        <h1>Pick the top {need}</h1>
-        <p>Choose the {need} takeaways you believe matter most. Numbers match the main screen.</p>
+        <h1>Choose your top {need}</h1>
+        <p>Tap the {need} points you like most. The numbers are the same as on the big screen.</p>
       </div>
       <ul className="vote-list">
         {state.statements.map((s) => {
@@ -377,7 +377,7 @@ function VoteFlow({ state }) {
       </ul>
       <div className="vote-bar">
         <div className="count">
-          {current.length} of {need} selected
+          {current.length} of {need} chosen
           <div className="dots">
             {Array.from({ length: need }, (_, i) => (
               <i key={i} className={i < current.length ? 'on' : ''} />
@@ -387,7 +387,7 @@ function VoteFlow({ state }) {
         </div>
         <button className="btn btn-primary" disabled={current.length !== need || sending} onClick={submit}>
           {sending ? <LoaderCircle size={18} className="spin" /> : <Send size={18} />}
-          Submit vote
+          Send vote
         </button>
       </div>
     </>
@@ -397,7 +397,7 @@ function VoteFlow({ state }) {
 function VoteDone({ state, ids }) {
   const mine = ids.map((id) => state.statements.find((s) => s.id === id)).filter(Boolean);
   return (
-    <StateCard icon={CircleCheck} ok title="Your vote is in" text="Watch the main screen for the results.">
+    <StateCard icon={CircleCheck} ok title="Thank you! Your vote is in." text="Look at the big screen for the results.">
       <ul className="recap-list">
         {mine.map((s) => (
           <li key={s.id}>
@@ -415,11 +415,11 @@ function VoteDone({ state, ids }) {
 function RevealView({ state }) {
   const top = (state.results || []).slice(0, 3);
   return (
-    <StateCard icon={MonitorPlay} title="Results are on the main screen" text="Here are the room's top takeaways.">
+    <StateCard icon={MonitorPlay} title="Results are on the big screen" text="These are the top points:">
       <ul className="recap-list">
         {top.map((s, i) => (
-          <li key={s.id} className={i === 0 ? 'is-top' : ''}>
-            <span className="badge-n">{i === 0 ? <Trophy size={14} /> : i + 1}</span>
+          <li key={s.id}>
+            <span className="badge-n">{i + 1}</span>
             <span>
               {s.text}
               <small>{teamLabel(s, state.teams)}</small>
@@ -511,7 +511,7 @@ function Splash({ state, url }) {
       <div className="splash-copy">
         <div className="eyebrow">Recap Room</div>
         <h1>{state.title}</h1>
-        <p>Team captains share what your team commits to. Then the whole room votes for the takeaways that matter most.</p>
+        <p>Team captains share what their team will do. Then everyone votes for the best points.</p>
       </div>
       <QrCard url={url} large />
     </div>
@@ -618,7 +618,7 @@ function VoteBoard({ state, url }) {
     <>
       <section className="vb">
         <h2>
-          Pick your top {Math.min(state.votesPerPerson, count)} on your phone
+          Choose your top {Math.min(state.votesPerPerson, count)} on your phone
         </h2>
         <div className="vb-list" ref={listRef}>
           {state.statements.map((s) => (
@@ -672,7 +672,7 @@ function Results({ state }) {
       {top.map((r, i) => {
         const visible = i >= top.length - shown;
         return (
-          <div key={r.id} className={`res-row ${i === 0 ? 'first' : ''} ${visible ? 'show' : ''}`}>
+          <div key={r.id} className={`res-row ${visible ? 'show' : ''}`}>
             <div className="res-rank">{i + 1}</div>
             <div className="res-text">
               {r.text}
@@ -922,7 +922,36 @@ function SettingsPanel({ fs, run }) {
         Save settings
       </button>
       {teamsLocked && <p className="hint">Team count is fixed once a team has submitted.</p>}
+      <SheetStatus sheet={fs.sheet} />
     </section>
+  );
+}
+
+function SheetStatus({ sheet }) {
+  if (!sheet) return null;
+  if (!sheet.enabled) {
+    return (
+      <div className="sheet-status off">
+        <CloudOff size={14} />
+        <span>Google Sheet not connected</span>
+      </div>
+    );
+  }
+  const label =
+    sheet.state === 'saving'
+      ? 'Saving to Google Sheet...'
+      : sheet.state === 'error'
+        ? sheet.error
+        : sheet.state === 'saved'
+          ? `Saved to Google Sheet at ${new Date(sheet.lastSyncAt).toLocaleTimeString()}`
+          : 'Google Sheet connected';
+  const Icon = sheet.state === 'error' ? CloudAlert : sheet.state === 'saving' ? RefreshCw : CloudCheck;
+  return (
+    <a className={`sheet-status ${sheet.state}`} href={sheet.url} target="_blank" rel="noreferrer" title="Open the Google Sheet">
+      <Icon size={14} className={sheet.state === 'saving' ? 'spin' : ''} />
+      <span>{label}</span>
+      <ExternalLink size={12} />
+    </a>
   );
 }
 
@@ -1529,8 +1558,6 @@ a { color: inherit; text-decoration: none; }
   line-height: 1.45;
 }
 .recap-list small { display: block; margin-top: 3px; font-size: 12px; font-weight: 600; color: var(--muted); }
-.recap-list li.is-top { background: #fdf0f1; }
-.recap-list li.is-top .badge-n { background: var(--red); }
 
 .vote-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .vote-item {
@@ -1750,15 +1777,11 @@ a { color: inherit; text-decoration: none; }
   transition: opacity 0.6s ease, transform 0.6s ease;
 }
 .res-row.show { opacity: 1; transform: none; }
-.res-row.first { background: var(--red); padding-top: 2.2vh; padding-bottom: 2.2vh; }
 .res-rank { font-size: 2.3em; font-weight: 800; color: var(--orange); text-align: center; }
-.first .res-rank { color: #fff; }
 .res-text { font-size: 1.25em; font-weight: 600; line-height: 1.3; }
-.first .res-text { font-size: 1.45em; }
 .res-text small { display: block; margin-top: 0.4vh; font-size: 0.62em; color: rgba(255, 255, 255, 0.62); }
 .res-bar { height: 0.8vh; margin-top: 1.1vh; overflow: hidden; border-radius: 99px; background: rgba(255, 255, 255, 0.14); }
 .res-bar i { display: block; height: 100%; border-radius: inherit; background: var(--orange); transition: width 1.2s ease 0.3s; }
-.first .res-bar i { background: #fff; }
 .res-votes { text-align: right; font-size: 1.9em; font-weight: 800; line-height: 1; }
 .res-votes small { display: block; margin-top: 0.3vh; font-size: 0.42em; font-weight: 600; color: rgba(255, 255, 255, 0.62); }
 .res-foot { display: flex; align-items: center; gap: 0.5em; margin-top: 1.4vh; font-size: 0.9em; color: rgba(255, 255, 255, 0.6); }
@@ -1859,6 +1882,12 @@ a { color: inherit; text-decoration: none; }
 .rm-row strong { flex: none; min-width: 26px; text-align: right; font-size: 15px; color: var(--navy); }
 .panel h3 + .hint { align-items: flex-start; margin: 0 0 14px; line-height: 1.45; }
 .panel h3 + .hint svg { flex: none; margin-top: 2px; }
+
+.sheet-status { display: flex; align-items: flex-start; gap: 6px; margin-top: 12px; padding: 8px 10px; border-radius: 8px; background: var(--bg); font-size: 12px; font-weight: 600; line-height: 1.4; color: var(--muted); }
+.sheet-status svg { flex: none; margin-top: 2px; }
+.sheet-status span { flex: 1; min-width: 0; }
+.sheet-status.saved, .sheet-status.idle { background: #e6f5ee; color: var(--ok); }
+.sheet-status.error { background: #fdecee; color: var(--red); }
 
 .toast {
   position: fixed;
