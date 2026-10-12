@@ -933,7 +933,7 @@ function SheetStatus({ sheet }) {
     return (
       <div className="sheet-status off">
         <CloudOff size={14} />
-        <span>Google Sheet not connected</span>
+        <span>Google Sheet not connected{sheet.reason ? `: ${sheet.reason}` : ''}</span>
       </div>
     );
   }
