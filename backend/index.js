@@ -20,7 +20,8 @@ const PHASES = ['setup', 'submit', 'review', 'vote', 'reveal'];
 const app = express();
 app.use(cors());
 app.get('/', (_req, res) => res.send('Recap Room backend is running'));
-app.get('/health', (_req, res) => res.json({ ok: true }));
+const VERSION = '2026-10-12-sheets';
+app.get('/health', (_req, res) => res.json({ ok: true, version: VERSION, sheet: sheetSync.status }));
 
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
@@ -294,10 +295,10 @@ function historyRows() {
 /* ---------------- Google Sheet sync ---------------- */
 
 const sheetSync = (() => {
-  const status = { enabled: false, state: 'off', lastSyncAt: null, error: null, url: null, email: null };
+  const status = { enabled: false, state: 'off', reason: null, lastSyncAt: null, error: null, url: null, email: null };
   const raw = String(GOOGLE_SHEET_URL || '').trim();
   const m = raw.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-  const spreadsheetId = m ? m[1] : /^[a-zA-Z0-9-_]{30,}$/.test(raw) ? raw : null;
+  const spreadsheetId = m ? m[1] : /^[a-zA-Z0-9-_]{30,}$/.test(raw) && !/PASTE/i.test(raw) ? raw : null;
   const dryRun = process.env.SHEETS_DRY_RUN === '1';
   const DEBOUNCE_MS = 4000;
   let api = null;
@@ -338,13 +339,15 @@ const sheetSync = (() => {
 
   try {
     if (!spreadsheetId) {
-      console.log('[sheets] Off: no Google Sheet link set (GOOGLE_SHEET_URL).');
+      status.reason = 'No Google Sheet link set. Paste it into GOOGLE_SHEET_URL at the top of backend/index.js.';
+      console.log('[sheets] Off:', status.reason);
     } else if (dryRun) {
       api = dryApi();
     } else {
       const creds = loadCredentials();
       if (!creds) {
-        console.log('[sheets] Off: credentials.json not found.');
+        status.reason = 'credentials.json not found. Add it as a Secret File on Render (filename: credentials.json).';
+        console.log('[sheets] Off:', status.reason);
       } else {
         const { sheets, auth } = require('@googleapis/sheets');
         api = sheets({ version: 'v4', auth: new auth.GoogleAuth({ credentials: creds, scopes: ['https://www.googleapis.com/auth/spreadsheets'] }) });
@@ -352,7 +355,8 @@ const sheetSync = (() => {
       }
     }
   } catch (e) {
-    console.error('[sheets] Off: could not start:', e.message);
+    status.reason = /Cannot find module/.test(e.message) ? 'Google package missing. Run: npm install @googleapis/sheets (in backend) and push.' : `Could not start: ${e.message}`;
+    console.error('[sheets] Off:', status.reason);
     api = null;
   }
 
