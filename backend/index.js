@@ -314,11 +314,30 @@ const sheetSync = (() => {
   };
   const q = (title) => `'${title.replace(/'/g, "''")}'`;
 
+  // Finds the service account key in: any env var holding the JSON (whatever its name), an env var holding a
+  // file path, credentials.json next to this file, in the working folder, or a Render Secret File.
   function loadCredentials() {
-    if (process.env.GOOGLE_CREDENTIALS) return JSON.parse(process.env.GOOGLE_CREDENTIALS);
-    const files = [process.env.GOOGLE_APPLICATION_CREDENTIALS, path.join(__dirname, 'credentials.json'), '/etc/secrets/credentials.json'].filter(Boolean);
+    const parse = (text, from) => {
+      let creds;
+      try {
+        creds = JSON.parse(text);
+      } catch {
+        throw new Error(`Credentials in ${from} are not valid JSON. Paste the whole credentials.json file, from { to }.`);
+      }
+      if (!creds.client_email || !creds.private_key) throw new Error(`Credentials in ${from} are missing client_email or private_key.`);
+      return { creds, from };
+    };
+    const preferred = ['GOOGLE_CREDENTIALS', 'GOOGLE_CREDENTIALS_JSON', 'GOOGLE_SERVICE_ACCOUNT', 'GOOGLE_APPLICATION_CREDENTIALS', 'CREDENTIALS', 'CREDENTIALS_JSON'];
+    const names = [...preferred, ...Object.keys(process.env).filter((n) => !preferred.includes(n))];
+    for (const name of names) {
+      const value = String(process.env[name] || '').trim();
+      if (!value) continue;
+      if (value.startsWith('{') && value.includes('client_email')) return parse(value, `env ${name}`);
+      if (preferred.includes(name) && /\.json$/i.test(value) && fs.existsSync(value)) return parse(fs.readFileSync(value, 'utf8'), value);
+    }
+    const files = [path.join(__dirname, 'credentials.json'), path.join(process.cwd(), 'credentials.json'), '/etc/secrets/credentials.json'];
     const file = files.find((f) => fs.existsSync(f));
-    return file ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
+    return file ? parse(fs.readFileSync(file, 'utf8'), file) : null;
   }
 
   function dryApi() {
@@ -344,11 +363,13 @@ const sheetSync = (() => {
     } else if (dryRun) {
       api = dryApi();
     } else {
-      const creds = loadCredentials();
-      if (!creds) {
-        status.reason = 'credentials.json not found. Add it as a Secret File on Render (filename: credentials.json).';
+      const found = loadCredentials();
+      if (!found) {
+        status.reason = 'Google credentials not found. On Render add env var GOOGLE_CREDENTIALS with the full contents of credentials.json, or a Secret File named credentials.json.';
         console.log('[sheets] Off:', status.reason);
       } else {
+        const { creds, from } = found;
+        console.log(`[sheets] Using credentials from ${from} (${creds.client_email})`);
         const { sheets, auth } = require('@googleapis/sheets');
         api = sheets({ version: 'v4', auth: new auth.GoogleAuth({ credentials: creds, scopes: ['https://www.googleapis.com/auth/spreadsheets'] }) });
         status.email = creds.client_email || null;
