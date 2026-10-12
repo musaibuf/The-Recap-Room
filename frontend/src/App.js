@@ -267,8 +267,8 @@ function TakeawayForm({ state, team, onBack }) {
       </button>
       <div className="p-intro">
         <div className="eyebrow">{team.name}</div>
-        <h1>What will your team do?</h1>
-        <p>Write 1 to 3 short points. What will your team do after today?</p>
+        <h1>Your Team Takeaways</h1>
+        <p>What will your team do differently after today?</p>
       </div>
       {values.map((v, i) => (
         <div className="field" key={i}>
@@ -283,7 +283,6 @@ function TakeawayForm({ state, team, onBack }) {
             rows={3}
             maxLength={state.maxLen}
             value={v}
-            placeholder={i === 0 ? 'Example: We will thank people more' : ''}
             onChange={(e) => update(i, e.target.value)}
           />
         </div>
