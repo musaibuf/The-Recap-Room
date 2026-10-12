@@ -4,7 +4,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import {
   Check, ChevronLeft, ChevronRight, CircleCheck, Clock, Copy, Download, Eye, EyeOff, GitMerge, Hourglass,
   KeyRound, ListChecks, LoaderCircle, Lock, LockOpen, MonitorPlay, Pencil, RotateCcw, Send, Settings2,
-  Trophy, Undo2, Users, WifiOff, X, CloudCheck, CloudAlert, CloudOff, RefreshCw, ExternalLink,
+  Trophy, Undo2, Users, WifiOff, X,
 } from 'lucide-react';
 
 /* Recap Room: participant (/), projector (?view=dashboard), facilitator (?view=facilitator) */
@@ -922,36 +922,7 @@ function SettingsPanel({ fs, run }) {
         Save settings
       </button>
       {teamsLocked && <p className="hint">Team count is fixed once a team has submitted.</p>}
-      <SheetStatus sheet={fs.sheet} />
     </section>
-  );
-}
-
-function SheetStatus({ sheet }) {
-  if (!sheet) return null;
-  if (!sheet.enabled) {
-    return (
-      <div className="sheet-status off">
-        <CloudOff size={14} />
-        <span>Google Sheet not connected{sheet.reason ? `: ${sheet.reason}` : ''}</span>
-      </div>
-    );
-  }
-  const label =
-    sheet.state === 'saving'
-      ? 'Saving to Google Sheet...'
-      : sheet.state === 'error'
-        ? sheet.error
-        : sheet.state === 'saved'
-          ? `Saved to Google Sheet at ${new Date(sheet.lastSyncAt).toLocaleTimeString()}`
-          : 'Google Sheet connected';
-  const Icon = sheet.state === 'error' ? CloudAlert : sheet.state === 'saving' ? RefreshCw : CloudCheck;
-  return (
-    <a className={`sheet-status ${sheet.state}`} href={sheet.url} target="_blank" rel="noreferrer" title="Open the Google Sheet">
-      <Icon size={14} className={sheet.state === 'saving' ? 'spin' : ''} />
-      <span>{label}</span>
-      <ExternalLink size={12} />
-    </a>
   );
 }
 
@@ -1882,12 +1853,6 @@ a { color: inherit; text-decoration: none; }
 .rm-row strong { flex: none; min-width: 26px; text-align: right; font-size: 15px; color: var(--navy); }
 .panel h3 + .hint { align-items: flex-start; margin: 0 0 14px; line-height: 1.45; }
 .panel h3 + .hint svg { flex: none; margin-top: 2px; }
-
-.sheet-status { display: flex; align-items: flex-start; gap: 6px; margin-top: 12px; padding: 8px 10px; border-radius: 8px; background: var(--bg); font-size: 12px; font-weight: 600; line-height: 1.4; color: var(--muted); }
-.sheet-status svg { flex: none; margin-top: 2px; }
-.sheet-status span { flex: 1; min-width: 0; }
-.sheet-status.saved, .sheet-status.idle { background: #e6f5ee; color: var(--ok); }
-.sheet-status.error { background: #fdecee; color: var(--red); }
 
 .toast {
   position: fixed;
